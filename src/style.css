@@ -1,0 +1,47 @@
+:root {
+  --parchment: #f2e8d5;
+  --parchment-deep: #e6d8bc;
+  --ink: #3b2f22;
+  --ink-soft: #6b5a45;
+  --civ-1: #b8643a;
+  --civ-2: #3f7484;
+  --civ-3: #7a5a86;
+  --river-label: #fbf6ea;
+
+  font-family: 'EB Garamond', Georgia, 'Times New Roman', serif;
+  font-size: 18px;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--parchment);
+  -webkit-font-smoothing: antialiased;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--parchment);
+  overflow-x: hidden;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  line-height: 1.15;
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  :root {
+    font-size: 16px;
+  }
+}
