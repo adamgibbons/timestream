@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, useTemplateRef } from 'vue'
+import { computed, onMounted, onUnmounted, ref, useTemplateRef } from 'vue'
 import { gsap } from 'gsap'
 import EraPanel from './EraPanel.vue'
 import { eras, type CivId } from '../data/eras'
+import { riverPaths } from '../data/river'
+import type { Scale } from '../geometry/coastline'
 
 /**
  * The SVG uses a 100 × 300 viewBox stretched over the three era rows
@@ -21,13 +23,25 @@ const labels: { civ: CivId; text: string; x: number; y: number }[] = [
 ]
 
 const root = useTemplateRef<HTMLElement>('root')
+const stream = useTemplateRef<HTMLElement>('stream')
 const revealHead = useTemplateRef<SVGGElement>('revealHead')
 
+// Coastline detail is generated in screen pixels, so regenerate whenever the stretched SVG changes size
+const scale = ref<Scale>({ x: 3, y: 9 })
+const paths = computed(() => riverPaths(scale.value))
+
 let mm: gsap.MatchMedia | undefined
+let resizeObserver: ResizeObserver | undefined
 
 onMounted(() => {
-  if (!root.value) return
+  if (!root.value || !stream.value) return
   const timeline = root.value
+  const streamColumn = stream.value
+
+  resizeObserver = new ResizeObserver(() => {
+    scale.value = { x: streamColumn.clientWidth / 100, y: streamColumn.clientHeight / STREAM_HEIGHT }
+  })
+  resizeObserver.observe(streamColumn)
 
   mm = gsap.matchMedia(timeline)
   mm.add(
@@ -87,12 +101,15 @@ onMounted(() => {
   )
 })
 
-onUnmounted(() => mm?.revert())
+onUnmounted(() => {
+  mm?.revert()
+  resizeObserver?.disconnect()
+})
 </script>
 
 <template>
   <section ref="root" class="timeline">
-    <div class="timeline__stream" aria-hidden="true">
+    <div ref="stream" class="timeline__stream" aria-hidden="true">
       <svg class="stream" :viewBox="`0 0 100 ${STREAM_HEIGHT}`" preserveAspectRatio="none">
         <defs>
           <!-- Both branches fade into Civ 3's color as they reach the confluence -->
@@ -118,39 +135,23 @@ onUnmounted(() => mm?.revert())
           <!-- Scroll-driven reveal: everything above the head is visible, with a soft leading edge -->
           <mask id="ts-reveal" maskUnits="userSpaceOnUse" x="-10" y="-10" width="120" :height="STREAM_HEIGHT + 20">
             <g ref="revealHead" :transform="`translate(0 ${STREAM_HEIGHT + REVEAL_FADE})`">
-              <rect x="-10" :y="-(STREAM_HEIGHT + 20)" width="120" :height="STREAM_HEIGHT + 20 - REVEAL_FADE" fill="white" />
+              <!-- Overlaps the fade by a unit so no anti-aliased seam shows where they meet -->
+              <rect x="-10" :y="-(STREAM_HEIGHT + 20)" width="120" :height="STREAM_HEIGHT + 21 - REVEAL_FADE" fill="white" />
               <rect x="-10" :y="-REVEAL_FADE" width="120" :height="REVEAL_FADE" fill="url(#ts-fade)" />
             </g>
           </mask>
 
-          <!-- Slight wobble so the banks read as hand-inked rather than vector-perfect -->
-          <filter id="ts-ink" x="-10%" y="-2%" width="120%" height="104%" color-interpolation-filters="sRGB">
-            <feTurbulence type="fractalNoise" baseFrequency="0.035 0.05" numOctaves="2" seed="7" result="noise" />
-            <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.5" xChannelSelector="R" yChannelSelector="G" result="wobbly" />
-            <feDropShadow in="wobbly" dx="0.6" dy="0" stdDeviation="0.5 1" flood-color="#3b2f22" flood-opacity="0.25" />
+          <filter id="ts-shadow" x="-10%" y="-2%" width="120%" height="104%" color-interpolation-filters="sRGB">
+            <feDropShadow dx="0.6" dy="0" stdDeviation="0.5 1" flood-color="#3b2f22" flood-opacity="0.25" />
           </filter>
         </defs>
 
         <g mask="url(#ts-reveal)">
-          <g filter="url(#ts-ink)">
-            <!-- Civ 3: born at the confluence, drawn underneath both branches so their ends overlap it -->
-            <path
-              fill="url(#ts-civ-3)"
-              d="M 32 212 L 70 212 L 70 216 C 70 236, 74 246, 74 262 C 74 282, 71 292, 71 302
-                 L 31 302 C 31 292, 28 282, 28 262 C 28 246, 32 236, 32 216 Z"
-            />
-            <!-- Civ 2: splits off Civ 1's right bank, then curves back in -->
-            <path
-              fill="url(#ts-civ-2)"
-              d="M 55 90 C 58 114, 65 128, 65 152 C 65 176, 56 200, 50 216
-                 L 70 216 C 70 196, 85 176, 85 152 C 85 124, 66 108, 57 90 Z"
-            />
-            <!-- Civ 1: the original stream, drifting left once Civ 2 branches away -->
-            <path
-              fill="url(#ts-civ-1)"
-              d="M 41 -2 C 39 30, 44 65, 41 100 C 38 122, 15 128, 15 152 C 15 176, 32 196, 32 216
-                 L 52 216 C 44 198, 35 176, 35 152 C 35 132, 54 122, 59 100 C 62 66, 57 30, 59 -2 Z"
-            />
+          <!-- Civ 3 is drawn underneath both branches so their ends overlap it at the confluence -->
+          <g filter="url(#ts-shadow)">
+            <path fill="url(#ts-civ-3)" :d="paths.civ3" />
+            <path fill="url(#ts-civ-2)" :d="paths.civ2" />
+            <path fill="url(#ts-civ-1)" :d="paths.civ1" />
           </g>
         </g>
       </svg>
